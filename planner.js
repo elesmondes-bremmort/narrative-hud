@@ -1,28 +1,61 @@
+let plannerApp = null;
+
+class PlannerNarratifDialog extends Dialog {
+  static get defaultOptions() {
+    return foundry.utils.mergeObject(super.defaultOptions, {
+      id: "planner-narratif-window",
+      title: "Planner Narratif",
+      width: 520,
+      height: "auto",
+      resizable: true,
+      top: 120,
+      left: 90
+    });
+  }
+}
+
+Hooks.once("init", () => {
+  game.settings.register("planner-narratif", "launcherPosition", {
+    scope: "client",
+    config: false,
+    type: Object,
+    default: {
+      left: "432px",
+      top: "851px"
+    }
+  });
+});
+
 Hooks.once("ready", () => {
   ui.notifications.info("Planner Narratif chargé !");
   console.log("Planner Narratif | Ready");
 
-  const existing = document.getElementById("planner-narratif-launcher");
-  if (existing) existing.remove();
+  document.getElementById("planner-narratif-launcher")?.remove();
 
   const button = document.createElement("button");
   button.id = "planner-narratif-launcher";
-  button.innerText = "⚔ Planner";
+  button.title = "Planner Narratif";
+  button.innerText = "⚔";
+
+  const savedPosition = game.settings.get(
+    "planner-narratif",
+    "launcherPosition"
+  );
+
+  button.style.left = savedPosition?.left ?? "432px";
+  button.style.top = savedPosition?.top ?? "851px";
 
   let isDragging = false;
   let offsetX = 0;
   let offsetY = 0;
 
-  const savedPosition = game.settings.get("planner-narratif", "launcherPosition");
-  if (savedPosition) {
-    button.style.left = savedPosition.left;
-    button.style.top = savedPosition.top;
-  }
-
   button.addEventListener("mousedown", event => {
     isDragging = true;
+
     offsetX = event.clientX - button.offsetLeft;
     offsetY = event.clientY - button.offsetTop;
+
+    button.classList.add("dragging");
   });
 
   document.addEventListener("mousemove", event => {
@@ -34,18 +67,31 @@ Hooks.once("ready", () => {
 
   document.addEventListener("mouseup", async () => {
     if (!isDragging) return;
-    isDragging = false;
 
-    await game.settings.set("planner-narratif", "launcherPosition", {
-      left: button.style.left,
-      top: button.style.top
-    });
+    isDragging = false;
+    button.classList.remove("dragging");
+
+    await game.settings.set(
+      "planner-narratif",
+      "launcherPosition",
+      {
+        left: button.style.left,
+        top: button.style.top
+      }
+    );
   });
 
-  button.addEventListener("click", event => {
-    if (isDragging) return;
+  button.addEventListener("dblclick", event => {
+    event.preventDefault();
+    event.stopPropagation();
 
-    new Dialog({
+    if (plannerApp?.rendered) {
+      plannerApp.close();
+      plannerApp = null;
+      return;
+    }
+
+    plannerApp = new PlannerNarratifDialog({
       title: "Planner Narratif",
       content: `
         <div class="planner-narratif-content">
@@ -58,24 +104,14 @@ Hooks.once("ready", () => {
           label: "Fermer"
         }
       }
-    }, {
-      top: 120,
-      left: 90,
-      width: 520
-    }).render(true);
+    });
+
+    plannerApp.render(true);
+
+    plannerApp._onClose = () => {
+      plannerApp = null;
+    };
   });
 
   document.body.appendChild(button);
-});
-
-Hooks.once("init", () => {
-  game.settings.register("planner-narratif", "launcherPosition", {
-    scope: "client",
-    config: false,
-    type: Object,
-    default: {
-      left: "90px",
-      top: "90px"
-    }
-  });
 });

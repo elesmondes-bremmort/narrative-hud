@@ -1,23 +1,35 @@
 #planner-narratif-launcher {
   position: fixed;
-  top: 90px;
-  left: 90px;
   z-index: 10000;
-  padding: 6px 10px;
+
+  width: 36px;
+  height: 36px;
+
   border: 1px solid #f09a4a;
   border-radius: 8px;
-  background: rgba(20, 15, 10, 0.35);
+
+  background: rgba(20, 15, 10, 0.25);
   color: #f0d8a8;
+
   cursor: move;
   opacity: 0.35;
-  transition: opacity 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+
+  font-size: 18px;
+  line-height: 1;
+
+  transition:
+    opacity 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+
   box-shadow: 0 0 6px rgba(240, 154, 74, 0.25);
 }
 
-#planner-narratif-launcher:hover {
+#planner-narratif-launcher:hover,
+#planner-narratif-launcher.dragging {
   opacity: 1;
   background: rgba(20, 15, 10, 0.92);
-  box-shadow: 0 0 10px rgba(240, 154, 74, 0.7);
+  box-shadow: 0 0 10px rgba(240, 154, 74, 0.75);
 }
 
 .planner-narratif-content {
