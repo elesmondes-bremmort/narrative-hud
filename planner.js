@@ -1,15 +1,54 @@
 let plannerApp = null;
 
-class PlannerNarratifDialog extends Dialog {
+class PlannerNarratifApp extends Application {
   static get defaultOptions() {
+    const saved = game.settings.get("planner-narratif", "windowState");
+
     return foundry.utils.mergeObject(super.defaultOptions, {
       id: "planner-narratif-window",
       title: "Planner Narratif",
-      width: 520,
-      height: "auto",
+      template: null,
+      popOut: true,
       resizable: true,
-      top: 120,
-      left: 90
+      width: saved?.width ?? 560,
+      height: saved?.height ?? 260,
+      top: saved?.top ?? 120,
+      left: saved?.left ?? 320
+    });
+  }
+
+  async _renderHTML() {
+    return `
+      <section class="planner-shell">
+        <header class="planner-header">
+          <strong>Planner Narratif</strong>
+          <span>V0.7</span>
+        </header>
+
+        <main class="planner-body">
+          <h2>Hello Ravessandre !</h2>
+          <p>Fenêtre flottante, déplaçable et redimensionnable.</p>
+        </main>
+      </section>
+    `;
+  }
+
+  async close(options = {}) {
+    await this._saveWindowState();
+    plannerApp = null;
+    return super.close(options);
+  }
+
+  async _saveWindowState() {
+    if (!this.element?.length) return;
+
+    const el = this.element[0];
+
+    await game.settings.set("planner-narratif", "windowState", {
+      left: el.offsetLeft,
+      top: el.offsetTop,
+      width: el.offsetWidth,
+      height: el.offsetHeight
     });
   }
 }
@@ -20,15 +59,27 @@ Hooks.once("init", () => {
     config: false,
     type: Object,
     default: {
-      left: "550px",
+      left: "432px",
       top: "851px"
+    }
+  });
+
+  game.settings.register("planner-narratif", "windowState", {
+    scope: "client",
+    config: false,
+    type: Object,
+    default: {
+      left: 320,
+      top: 120,
+      width: 560,
+      height: 260
     }
   });
 });
 
 Hooks.once("ready", () => {
   ui.notifications.info("Planner Narratif chargé !");
-  console.log("Planner Narratif | Ready");
+  console.log("Planner Narratif | Ready V0.7");
 
   document.getElementById("planner-narratif-launcher")?.remove();
 
@@ -37,30 +88,28 @@ Hooks.once("ready", () => {
   button.title = "Planner Narratif";
   button.innerText = "⚔";
 
-  const savedPosition = game.settings.get(
-    "planner-narratif",
-    "launcherPosition"
-  );
+  const savedPosition = game.settings.get("planner-narratif", "launcherPosition");
 
   button.style.left = savedPosition?.left ?? "432px";
   button.style.top = savedPosition?.top ?? "851px";
 
   let isDragging = false;
+  let hasMoved = false;
   let offsetX = 0;
   let offsetY = 0;
 
   button.addEventListener("mousedown", event => {
     isDragging = true;
-
+    hasMoved = false;
     offsetX = event.clientX - button.offsetLeft;
     offsetY = event.clientY - button.offsetTop;
-
     button.classList.add("dragging");
   });
 
   document.addEventListener("mousemove", event => {
     if (!isDragging) return;
 
+    hasMoved = true;
     button.style.left = `${event.clientX - offsetX}px`;
     button.style.top = `${event.clientY - offsetY}px`;
   });
@@ -71,46 +120,25 @@ Hooks.once("ready", () => {
     isDragging = false;
     button.classList.remove("dragging");
 
-    await game.settings.set(
-      "planner-narratif",
-      "launcherPosition",
-      {
-        left: button.style.left,
-        top: button.style.top
-      }
-    );
+    await game.settings.set("planner-narratif", "launcherPosition", {
+      left: button.style.left,
+      top: button.style.top
+    });
   });
 
   button.addEventListener("dblclick", event => {
     event.preventDefault();
     event.stopPropagation();
 
+    if (hasMoved) return;
+
     if (plannerApp?.rendered) {
       plannerApp.close();
-      plannerApp = null;
       return;
     }
 
-    plannerApp = new PlannerNarratifDialog({
-      title: "Planner Narratif",
-      content: `
-        <div class="planner-narratif-content">
-          <h2>Hello Ravessandre !</h2>
-          <p>Le Planner Narratif est vivant.</p>
-        </div>
-      `,
-      buttons: {
-        close: {
-          label: "Fermer"
-        }
-      }
-    });
-
+    plannerApp = new PlannerNarratifApp();
     plannerApp.render(true);
-
-    plannerApp._onClose = () => {
-      plannerApp = null;
-    };
   });
 
   document.body.appendChild(button);
