@@ -10,14 +10,6 @@ const demoPool = [
   { id: "player-slot", label: "J", name: "Slot Joueur", type: "slot" }
 ];
 
-const demoTimeline = [
-  { id: "slot-1", label: "J", name: "Slot Joueur", type: "slot" },
-  { id: "bandit-1", label: "B1", name: "Bandit 1", type: "npc" },
-  { id: "slot-2", label: "J", name: "Slot Joueur", type: "slot" },
-  { id: "bandit-2", label: "B2", name: "Bandit 2", type: "npc" },
-  { id: "ogre", label: "OG", name: "Ogre", type: "npc" }
-];
-
 class PlannerNarratifApp extends Application {
   static get defaultOptions() {
     const saved = game.settings.get("planner-narratif", "windowState") ?? {};
@@ -38,38 +30,99 @@ class PlannerNarratifApp extends Application {
       <section class="planner-shell">
         <header class="planner-header">
           <strong>Planner Narratif</strong>
-          <span>V0.10</span>
+          <span>V0.11</span>
         </header>
 
         <main class="planner-body">
           <section class="planner-section">
             <h3>POOL</h3>
-            <div class="planner-pool">
-              ${demoPool.map(item => this._renderChip(item, "pool")).join("")}
-            </div>
+            <div class="planner-pool"></div>
           </section>
 
           <section class="planner-section">
             <h3>TIMELINE</h3>
-            <div class="planner-timeline">
-              ${demoTimeline.map(item => this._renderChip(item, "timeline")).join("")}
-            </div>
+            <div class="planner-timeline"></div>
           </section>
         </main>
       </section>
     `);
   }
 
-  _renderChip(item, zone) {
+  activateListeners(html) {
+    super.activateListeners(html);
+    this._refreshContentOnly();
+  }
+
+  _refreshContentOnly() {
+    if (!this.rendered) return;
+
+    const poolEl = this.element.find(".planner-pool");
+    const timelineEl = this.element.find(".planner-timeline");
+
+    poolEl.html(demoPool.map(item => this._renderChip(item, "pool")).join(""));
+
+    const timeline = this._getTimeline();
+    timelineEl.html(timeline.map((item, index) => this._renderChip(item, "timeline", index)).join(""));
+
+    this._bindPlannerEvents();
+  }
+
+  _bindPlannerEvents() {
+    this.element.find(".planner-chip-pool").off("click").on("click", async event => {
+      const id = event.currentTarget.dataset.id;
+      const item = demoPool.find(p => p.id === id);
+      if (!item) return;
+
+      const timeline = this._getTimeline();
+
+      timeline.push({
+        ...item,
+        occurrenceId: foundry.utils.randomID()
+      });
+
+      await this._setTimeline(timeline);
+    });
+
+    this.element.find(".planner-chip-timeline").off("click").on("click", async event => {
+      if (event.detail !== 3) return;
+
+      const index = Number(event.currentTarget.dataset.index);
+      const timeline = this._getTimeline();
+
+      timeline.splice(index, 1);
+
+      await this._setTimeline(timeline);
+    });
+  }
+
+  _renderChip(item, zone, index = null) {
+    const indexAttr = index === null ? "" : `data-index="${index}"`;
+
     return `
       <button
         class="planner-chip planner-chip-${item.type} planner-chip-${zone}"
         title="${item.name}"
         type="button"
+        data-id="${item.id}"
+        ${indexAttr}
       >
         ${item.label}
       </button>
     `;
+  }
+
+  _getTimeline() {
+    return game.settings.get("planner-narratif", "timeline") ?? [];
+  }
+
+  async _setTimeline(timeline) {
+    await game.settings.set("planner-narratif", "timeline", timeline);
+
+    this._refreshContentOnly();
+
+    game.socket.emit("module.planner-narratif", {
+      type: "timeline-updated"
+    });
   }
 
   async close(options = {}) {
@@ -111,11 +164,23 @@ Hooks.once("init", () => {
       height: 260
     }
   });
+
+  game.settings.register("planner-narratif", "timeline", {
+    scope: "world",
+    config: false,
+    type: Object,
+    default: []
+  });
 });
 
 Hooks.once("ready", () => {
   ui.notifications.info("Planner Narratif chargé !");
-  console.log("Planner Narratif | Ready V0.10");
+  console.log("Planner Narratif | Ready V0.11");
+
+  game.socket.on("module.planner-narratif", data => {
+    if (data?.type !== "timeline-updated") return;
+    plannerApp?._refreshContentOnly();
+  });
 
   document.getElementById("planner-narratif-launcher")?.remove();
 
