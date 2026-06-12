@@ -1,1 +1,16 @@
-/* Planner Narratif V0 */
+#planner-narratif-launcher {
+  position: fixed;
+  top: 80px;
+  left: 300px;
+  z-index: 10000;
+  padding: 6px 10px;
+  border: 1px solid #b89b5e;
+  border-radius: 6px;
+  background: rgba(20, 15, 10, 0.9);
+  color: #f0d8a8;
+  cursor: pointer;
+}
+
+.planner-narratif-content {
+  padding: 12px;
+}
