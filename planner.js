@@ -16,94 +16,6 @@ const demoPool = [
   { id: "player-slot", label: "J", name: "Slot Joueur", type: "slot" }
 ];
 
-function canUserModifyItem(item) {
-  return game.user.isGM || item?.type === "player" || item?.type === "slot";
-}
-
-function getTimeline() {
-  return game.settings.get(MODULE_ID, "timeline") ?? [];
-}
-
-async function saveTimeline(timeline) {
-  if (!game.user.isGM) return;
-
-  await game.settings.set(MODULE_ID, "timeline", timeline);
-
-  plannerApp?._refreshTimelineOnly();
-
-  game.socket.emit(`module.${MODULE_ID}`, {
-    type: "state-updated"
-  });
-}
-
-function requestAddToTimeline(itemId) {
-  const item = demoPool.find(p => p.id === itemId);
-  if (!item) return;
-
-  if (!canUserModifyItem(item)) {
-    ui.notifications.warn("Seul le MJ peut ajouter les PNJ et monstres.");
-    return;
-  }
-
-  if (game.user.isGM) {
-    return addToTimeline(itemId);
-  }
-
-  game.socket.emit(`module.${MODULE_ID}`, {
-    type: "request-add",
-    itemId
-  });
-}
-
-function requestRemoveFromTimeline(index) {
-  const timeline = getTimeline();
-  const item = timeline[index];
-
-  if (!item) return;
-
-  if (!canUserModifyItem(item)) {
-    ui.notifications.warn("Seul le MJ peut retirer les PNJ et monstres.");
-    return;
-  }
-
-  if (game.user.isGM) {
-    return removeFromTimeline(index);
-  }
-
-  game.socket.emit(`module.${MODULE_ID}`, {
-    type: "request-remove",
-    index
-  });
-}
-
-async function addToTimeline(itemId) {
-  if (!game.user.isGM) return;
-
-  const item = demoPool.find(p => p.id === itemId);
-  if (!item) return;
-
-  const timeline = getTimeline();
-
-  timeline.push({
-    ...item,
-    occurrenceId: foundry.utils.randomID()
-  });
-
-  await saveTimeline(timeline);
-}
-
-async function removeFromTimeline(index) {
-  if (!game.user.isGM) return;
-
-  const timeline = getTimeline();
-
-  if (index < 0 || index >= timeline.length) return;
-
-  timeline.splice(index, 1);
-
-  await saveTimeline(timeline);
-}
-
 class PlannerNarratifApp extends Application {
   static get defaultOptions() {
     const saved = game.settings.get(MODULE_ID, "windowState") ?? {};
@@ -120,11 +32,16 @@ class PlannerNarratifApp extends Application {
   }
 
   async _renderInner() {
+    const timeline = game.settings.get(MODULE_ID, "timeline") ?? [];
+
     return $(`
       <section class="planner-shell">
         <header class="planner-header">
           <strong>Planner Narratif</strong>
-          <span>V0.16</span>
+          <div class="planner-header-actions">
+            <button type="button" class="planner-refresh">↻ Actualiser</button>
+            <span>V0.17</span>
+          </div>
         </header>
 
         <main class="planner-body">
@@ -138,7 +55,7 @@ class PlannerNarratifApp extends Application {
           <section class="planner-section">
             <h3>TIMELINE</h3>
             <div class="planner-timeline">
-              ${this._renderTimeline()}
+              ${timeline.map((item, index) => this._renderChip(item, "timeline", index)).join("")}
             </div>
           </section>
         </main>
@@ -149,36 +66,49 @@ class PlannerNarratifApp extends Application {
   activateListeners(html) {
     super.activateListeners(html);
 
-    html.on("dblclick", ".planner-chip-pool", event => {
-      event.preventDefault();
-      event.stopPropagation();
+    html.find(".planner-refresh").on("click", () => {
+      this.render(false);
+    });
+
+    html.find(".planner-chip-pool").on("dblclick", async event => {
+      if (!game.user.isGM) {
+        ui.notifications.warn("Seul le MJ peut modifier la timeline pour l'instant.");
+        return;
+      }
 
       const id = event.currentTarget.dataset.id;
-      requestAddToTimeline(id);
+      const item = demoPool.find(p => p.id === id);
+      if (!item) return;
+
+      const timeline = game.settings.get(MODULE_ID, "timeline") ?? [];
+
+      timeline.unshift({
+        ...item,
+        occurrenceId: foundry.utils.randomID()
+      });
+
+      await game.settings.set(MODULE_ID, "timeline", timeline);
+      this.render(false);
     });
 
-    html.on("click", ".planner-chip-timeline", event => {
+    html.find(".planner-chip-timeline").on("click", async event => {
       if (event.detail !== 3) return;
 
-      event.preventDefault();
-      event.stopPropagation();
+      if (!game.user.isGM) {
+        ui.notifications.warn("Seul le MJ peut modifier la timeline pour l'instant.");
+        return;
+      }
 
       const index = Number(event.currentTarget.dataset.index);
-      requestRemoveFromTimeline(index);
+      const timeline = game.settings.get(MODULE_ID, "timeline") ?? [];
+
+      if (index < 0 || index >= timeline.length) return;
+
+      timeline.splice(index, 1);
+
+      await game.settings.set(MODULE_ID, "timeline", timeline);
+      this.render(false);
     });
-  }
-
-  _renderTimeline() {
-    const timeline = getTimeline();
-    return timeline
-      .map((item, index) => this._renderChip(item, "timeline", index))
-      .join("");
-  }
-
-  _refreshTimelineOnly() {
-    if (!this.rendered) return;
-
-    this.element.find(".planner-timeline").html(this._renderTimeline());
   }
 
   _renderChip(item, zone, index = null) {
@@ -246,27 +176,7 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", () => {
-  console.log("Planner Narratif | Ready V0.16");
-
-  game.socket.on(`module.${MODULE_ID}`, async data => {
-    if (!data?.type) return;
-
-    if (data.type === "state-updated") {
-      plannerApp?._refreshTimelineOnly();
-      return;
-    }
-
-    if (!game.user.isGM) return;
-
-    if (data.type === "request-add") {
-      await addToTimeline(data.itemId);
-      return;
-    }
-
-    if (data.type === "request-remove") {
-      await removeFromTimeline(data.index);
-    }
-  });
+  console.log("Planner Narratif | Ready V0.17");
 
   document.getElementById("planner-narratif-launcher")?.remove();
 
