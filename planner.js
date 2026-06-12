@@ -1,20 +1,21 @@
 const MODULE_ID = "planner-narratif";
 let plannerApp = null;
 
-const demoPool = [
-  { id: "alaric", label: "A", name: "Alaric", type: "player" },
-  { id: "kaelyss", label: "K", name: "Kaelyss", type: "player" },
-  { id: "torvek", label: "T", name: "Torvek", type: "player" },
+function getPool() {
+  return game.settings.get(MODULE_ID, "pool") ?? [];
+}
 
-  { id: "garde-1", label: "G1", name: "Garde 1", type: "npc" },
-  { id: "garde-2", label: "G2", name: "Garde 2", type: "npc" },
+function getTimeline() {
+  return game.settings.get(MODULE_ID, "timeline") ?? [];
+}
 
-  { id: "bandit-1", label: "B1", name: "Bandit 1", type: "monster" },
-  { id: "bandit-2", label: "B2", name: "Bandit 2", type: "monster" },
-  { id: "ogre", label: "OG", name: "Ogre", type: "monster" },
+async function setPool(pool) {
+  await game.settings.set(MODULE_ID, "pool", pool);
+}
 
-  { id: "player-slot", label: "J", name: "Slot Joueur", type: "slot" }
-];
+async function setTimeline(timeline) {
+  await game.settings.set(MODULE_ID, "timeline", timeline);
+}
 
 class PlannerNarratifApp extends Application {
   static get defaultOptions() {
@@ -32,7 +33,8 @@ class PlannerNarratifApp extends Application {
   }
 
   async _renderInner() {
-    const timeline = game.settings.get(MODULE_ID, "timeline") ?? [];
+    const pool = getPool();
+    const timeline = getTimeline();
 
     return $(`
       <section class="planner-shell">
@@ -40,8 +42,9 @@ class PlannerNarratifApp extends Application {
           <strong>Planner Narratif</strong>
           <div class="planner-header-actions">
             <button type="button" class="planner-refresh">↻ Actualiser</button>
+            ${game.user.isGM ? `<button type="button" class="planner-add">+ Ajouter</button>` : ""}
             ${game.user.isGM ? `<button type="button" class="planner-reset">Reset Timeline</button>` : ""}
-            <span>V0.18</span>
+            <span>V0.19</span>
           </div>
         </header>
 
@@ -49,7 +52,7 @@ class PlannerNarratifApp extends Application {
           <section class="planner-section">
             <h3>POOL</h3>
             <div class="planner-pool">
-              ${demoPool.map(item => this._renderChip(item, "pool")).join("")}
+              ${pool.map(item => this._renderChip(item, "pool")).join("")}
             </div>
           </section>
 
@@ -71,6 +74,10 @@ class PlannerNarratifApp extends Application {
       this.render(false);
     });
 
+    html.find(".planner-add").on("click", () => {
+      this._openCreateDialog();
+    });
+
     html.find(".planner-reset").on("click", async () => {
       if (!game.user.isGM) return;
 
@@ -84,7 +91,7 @@ class PlannerNarratifApp extends Application {
 
       if (!confirmReset) return;
 
-      await game.settings.set(MODULE_ID, "timeline", []);
+      await setTimeline([]);
       this.render(false);
     });
 
@@ -95,17 +102,47 @@ class PlannerNarratifApp extends Application {
       }
 
       const id = event.currentTarget.dataset.id;
-      const item = demoPool.find(p => p.id === id);
+      const item = getPool().find(p => p.id === id);
       if (!item) return;
 
-      const timeline = game.settings.get(MODULE_ID, "timeline") ?? [];
+      const timeline = getTimeline();
 
       timeline.unshift({
         ...item,
         occurrenceId: foundry.utils.randomID()
       });
 
-      await game.settings.set(MODULE_ID, "timeline", timeline);
+      await setTimeline(timeline);
+      this.render(false);
+    });
+
+    html.find(".planner-chip-pool").on("contextmenu", async event => {
+      event.preventDefault();
+
+      if (!game.user.isGM) return;
+
+      const id = event.currentTarget.dataset.id;
+      const pool = getPool();
+      const item = pool.find(p => p.id === id);
+
+      if (!item) return;
+
+      const confirmDelete = await Dialog.confirm({
+        title: "Supprimer du Pool",
+        content: `<p>Supprimer définitivement <strong>${item.name}</strong> ?</p>`,
+        yes: () => true,
+        no: () => false,
+        defaultYes: false
+      });
+
+      if (!confirmDelete) return;
+
+      const newPool = pool.filter(p => p.id !== id);
+      const newTimeline = getTimeline().filter(t => t.id !== id);
+
+      await setPool(newPool);
+      await setTimeline(newTimeline);
+
       this.render(false);
     });
 
@@ -118,13 +155,13 @@ class PlannerNarratifApp extends Application {
       }
 
       const index = Number(event.currentTarget.dataset.index);
-      const timeline = game.settings.get(MODULE_ID, "timeline") ?? [];
+      const timeline = getTimeline();
 
       if (index < 0 || index >= timeline.length) return;
 
       timeline.splice(index, 1);
 
-      await game.settings.set(MODULE_ID, "timeline", timeline);
+      await setTimeline(timeline);
       this.render(false);
     });
 
@@ -157,15 +194,80 @@ class PlannerNarratifApp extends Application {
         if (Number.isNaN(fromIndex) || Number.isNaN(toIndex)) return;
         if (fromIndex === toIndex) return;
 
-        const timeline = game.settings.get(MODULE_ID, "timeline") ?? [];
+        const timeline = getTimeline();
 
         const [moved] = timeline.splice(fromIndex, 1);
         timeline.splice(toIndex, 0, moved);
 
-        await game.settings.set(MODULE_ID, "timeline", timeline);
+        await setTimeline(timeline);
         this.render(false);
       });
     }
+  }
+
+  async _openCreateDialog() {
+    const content = `
+      <form class="planner-create-form">
+        <div class="form-group">
+          <label>Nom</label>
+          <input type="text" name="name" placeholder="Alaric" />
+        </div>
+
+        <div class="form-group">
+          <label>Label court</label>
+          <input type="text" name="label" placeholder="A" maxlength="3" />
+        </div>
+
+        <div class="form-group">
+          <label>Type</label>
+          <select name="type">
+            <option value="player">PJ</option>
+            <option value="npc">PNJ</option>
+            <option value="monster">Monstre</option>
+            <option value="slot">Slot Joueur</option>
+          </select>
+        </div>
+      </form>
+    `;
+
+    new Dialog({
+      title: "Ajouter au Pool",
+      content,
+      buttons: {
+        create: {
+          label: "Créer",
+          callback: async html => {
+            const form = html.find(".planner-create-form")[0];
+            const data = new FormData(form);
+
+            const name = String(data.get("name") ?? "").trim();
+            const label = String(data.get("label") ?? "").trim().toUpperCase();
+            const type = String(data.get("type") ?? "player");
+
+            if (!name || !label) {
+              ui.notifications.warn("Nom et label court sont obligatoires.");
+              return;
+            }
+
+            const pool = getPool();
+
+            pool.push({
+              id: foundry.utils.randomID(),
+              name,
+              label,
+              type
+            });
+
+            await setPool(pool);
+            this.render(false);
+          }
+        },
+        cancel: {
+          label: "Annuler"
+        }
+      },
+      default: "create"
+    }).render(true);
   }
 
   _renderChip(item, zone, index = null) {
@@ -224,6 +326,13 @@ Hooks.once("init", () => {
     }
   });
 
+  game.settings.register(MODULE_ID, "pool", {
+    scope: "world",
+    config: false,
+    type: Object,
+    default: []
+  });
+
   game.settings.register(MODULE_ID, "timeline", {
     scope: "world",
     config: false,
@@ -233,7 +342,7 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", () => {
-  console.log("Planner Narratif | Ready V0.18");
+  console.log("Planner Narratif | Ready V0.19");
 
   document.getElementById("planner-narratif-launcher")?.remove();
 
