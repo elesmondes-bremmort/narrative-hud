@@ -33,7 +33,7 @@ class PlannerNarratifApp extends Application {
       <section class="planner-shell">
         <header class="planner-header">
           <strong>Planner Narratif</strong>
-          <span>V0.14</span>
+          <span>V0.15</span>
         </header>
 
         <main class="planner-body">
@@ -58,7 +58,12 @@ class PlannerNarratifApp extends Application {
   activateListeners(html) {
     super.activateListeners(html);
 
-    html.find(".planner-chip-pool").on("click", async event => {
+    html.find(".planner-chip-pool").on("dblclick", async event => {
+      if (!game.user.isGM) {
+        ui.notifications.warn("Seul le MJ peut modifier la timeline pour l'instant.");
+        return;
+      }
+
       const id = event.currentTarget.dataset.id;
       const item = demoPool.find(p => p.id === id);
       if (!item) return;
@@ -77,8 +82,15 @@ class PlannerNarratifApp extends Application {
     html.find(".planner-chip-timeline").on("click", async event => {
       if (event.detail !== 3) return;
 
+      if (!game.user.isGM) {
+        ui.notifications.warn("Seul le MJ peut modifier la timeline pour l'instant.");
+        return;
+      }
+
       const index = Number(event.currentTarget.dataset.index);
       const timeline = game.settings.get(MODULE_ID, "timeline") ?? [];
+
+      if (index < 0 || index >= timeline.length) return;
 
       timeline.splice(index, 1);
 
@@ -152,7 +164,7 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", () => {
-  console.log("Planner Narratif | Ready V0.14");
+  console.log("Planner Narratif | Ready V0.15");
 
   document.getElementById("planner-narratif-launcher")?.remove();
 
@@ -162,6 +174,7 @@ Hooks.once("ready", () => {
   button.innerText = "⚔";
 
   const savedPosition = game.settings.get(MODULE_ID, "launcherPosition");
+
   button.style.left = savedPosition?.left ?? "432px";
   button.style.top = savedPosition?.top ?? "851px";
 
