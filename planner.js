@@ -1,5 +1,23 @@
 let plannerApp = null;
 
+const demoPool = [
+  { id: "alaric", label: "A", name: "Alaric", type: "player" },
+  { id: "kaelyss", label: "K", name: "Kaelyss", type: "player" },
+  { id: "torvek", label: "T", name: "Torvek", type: "player" },
+  { id: "bandit-1", label: "B1", name: "Bandit 1", type: "npc" },
+  { id: "bandit-2", label: "B2", name: "Bandit 2", type: "npc" },
+  { id: "ogre", label: "OG", name: "Ogre", type: "npc" },
+  { id: "player-slot", label: "J", name: "Slot Joueur", type: "slot" }
+];
+
+const demoTimeline = [
+  { id: "slot-1", label: "J", name: "Slot Joueur", type: "slot" },
+  { id: "bandit-1", label: "B1", name: "Bandit 1", type: "npc" },
+  { id: "slot-2", label: "J", name: "Slot Joueur", type: "slot" },
+  { id: "bandit-2", label: "B2", name: "Bandit 2", type: "npc" },
+  { id: "ogre", label: "OG", name: "Ogre", type: "npc" }
+];
+
 class PlannerNarratifApp extends Application {
   static get defaultOptions() {
     const saved = game.settings.get("planner-narratif", "windowState") ?? {};
@@ -7,8 +25,8 @@ class PlannerNarratifApp extends Application {
     return foundry.utils.mergeObject(super.defaultOptions, {
       id: "planner-narratif-window",
       title: "Planner Narratif",
-      width: saved.width ?? 560,
-      height: saved.height ?? 300,
+      width: saved.width ?? 720,
+      height: saved.height ?? 260,
       top: saved.top ?? 120,
       left: saved.left ?? 320,
       resizable: true
@@ -20,22 +38,38 @@ class PlannerNarratifApp extends Application {
       <section class="planner-shell">
         <header class="planner-header">
           <strong>Planner Narratif</strong>
-          <span>V0.8</span>
+          <span>V0.10</span>
         </header>
 
         <main class="planner-body">
           <section class="planner-section">
             <h3>POOL</h3>
-            <div class="planner-empty">Aucun protagoniste.</div>
+            <div class="planner-pool">
+              ${demoPool.map(item => this._renderChip(item, "pool")).join("")}
+            </div>
           </section>
 
           <section class="planner-section">
             <h3>TIMELINE</h3>
-            <div class="planner-empty">Aucune action planifiée.</div>
+            <div class="planner-timeline">
+              ${demoTimeline.map(item => this._renderChip(item, "timeline")).join("")}
+            </div>
           </section>
         </main>
       </section>
     `);
+  }
+
+  _renderChip(item, zone) {
+    return `
+      <button
+        class="planner-chip planner-chip-${item.type} planner-chip-${zone}"
+        title="${item.name}"
+        type="button"
+      >
+        ${item.label}
+      </button>
+    `;
   }
 
   async close(options = {}) {
@@ -73,15 +107,15 @@ Hooks.once("init", () => {
     default: {
       left: 320,
       top: 120,
-      width: 560,
-      height: 300
+      width: 720,
+      height: 260
     }
   });
 });
 
 Hooks.once("ready", () => {
   ui.notifications.info("Planner Narratif chargé !");
-  console.log("Planner Narratif | Ready V0.8");
+  console.log("Planner Narratif | Ready V0.10");
 
   document.getElementById("planner-narratif-launcher")?.remove();
 
