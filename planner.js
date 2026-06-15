@@ -1,4 +1,9 @@
 const MODULE_ID = "planner-narratif";
+const LAUNCHER_DEFAULT_POSITION = {
+  right: "21px",
+  bottom: "274px"
+};
+
 let plannerApp = null;
 
 function getPool() {
@@ -45,7 +50,7 @@ class PlannerNarratifApp extends Application {
             ${game.user.isGM ? `<button type="button" class="planner-add">+ Ajouter</button>` : ""}
             ${game.user.isGM ? `<button type="button" class="planner-new-turn">Nouveau Tour</button>` : ""}
             ${game.user.isGM ? `<button type="button" class="planner-clear">Vider Timeline</button>` : ""}
-            <span>V0.23</span>
+            <span>V0.24</span>
           </div>
         </header>
 
@@ -432,10 +437,7 @@ Hooks.once("init", () => {
     scope: "client",
     config: false,
     type: Object,
-    default: {
-      left: "432px",
-      top: "851px"
-    }
+    default: LAUNCHER_DEFAULT_POSITION
   });
 
   game.settings.register(MODULE_ID, "windowState", {
@@ -466,7 +468,7 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", () => {
-  console.log("Planner Narratif | Ready V0.23");
+  console.log("Planner Narratif | Ready V0.24");
 
   document.getElementById("planner-narratif-launcher")?.remove();
 
@@ -477,8 +479,26 @@ Hooks.once("ready", () => {
 
   const savedPosition = game.settings.get(MODULE_ID, "launcherPosition");
 
-  button.style.left = savedPosition?.left ?? "432px";
-  button.style.top = savedPosition?.top ?? "851px";
+  const parsePixels = value => {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  };
+
+  const applyLauncherPosition = position => {
+    const width = button.offsetWidth || 36;
+    const height = button.offsetHeight || 36;
+    const maxRight = Math.max(8, window.innerWidth - width - 8);
+    const maxBottom = Math.max(8, window.innerHeight - height - 8);
+    const right = parsePixels(position?.right) ?? parsePixels(LAUNCHER_DEFAULT_POSITION.right);
+    const bottom = parsePixels(position?.bottom) ?? parsePixels(LAUNCHER_DEFAULT_POSITION.bottom);
+
+    button.style.left = "auto";
+    button.style.top = "auto";
+    button.style.right = `${Math.max(8, Math.min(right, maxRight))}px`;
+    button.style.bottom = `${Math.max(8, Math.min(bottom, maxBottom))}px`;
+  };
+
+  window.addEventListener("resize", () => applyLauncherPosition(game.settings.get(MODULE_ID, "launcherPosition")));
 
   let hasMoved = false;
   let offsetX = 0;
@@ -486,8 +506,13 @@ Hooks.once("ready", () => {
 
   const onMouseMove = event => {
     hasMoved = true;
-    button.style.left = `${event.clientX - offsetX}px`;
-    button.style.top = `${event.clientY - offsetY}px`;
+    const maxLeft = Math.max(8, window.innerWidth - button.offsetWidth - 8);
+    const maxTop = Math.max(8, window.innerHeight - button.offsetHeight - 8);
+
+    button.style.left = `${Math.max(8, Math.min(event.clientX - offsetX, maxLeft))}px`;
+    button.style.top = `${Math.max(8, Math.min(event.clientY - offsetY, maxTop))}px`;
+    button.style.right = "auto";
+    button.style.bottom = "auto";
     button.classList.add("dragging");
   };
 
@@ -497,9 +522,11 @@ Hooks.once("ready", () => {
 
     button.classList.remove("dragging");
 
+    const rect = button.getBoundingClientRect();
+
     await game.settings.set(MODULE_ID, "launcherPosition", {
-      left: button.style.left,
-      top: button.style.top
+      right: `${Math.round(Math.max(8, window.innerWidth - rect.right))}px`,
+      bottom: `${Math.round(Math.max(8, window.innerHeight - rect.bottom))}px`
     });
   };
 
@@ -529,4 +556,5 @@ Hooks.once("ready", () => {
   });
 
   document.body.appendChild(button);
+  applyLauncherPosition(savedPosition);
 });

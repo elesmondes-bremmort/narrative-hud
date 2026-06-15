@@ -1,5 +1,7 @@
 #planner-narratif-launcher {
   position: fixed;
+  right: 21px;
+  bottom: 274px;
   z-index: 10000;
   width: 36px;
   height: 36px;
