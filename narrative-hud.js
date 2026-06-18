@@ -50,6 +50,7 @@ class NarrativeHudOverlay {
     const html = this._renderInner();
     document.body.appendChild(html[0]);
     this.activateListeners(html);
+    this._positionCombatPoolPanel();
   }
 
   close() {
@@ -86,29 +87,30 @@ class NarrativeHudOverlay {
   _renderCombatView() {
     const pool = getPool();
     const timeline = getTimeline();
+    const activeItem = timeline.find(item => item.played !== true);
+    const activeId = activeItem?.id ?? null;
 
     return `
       <section class="narrative-hud-combat-timeline-panel">
-        <div class="narrative-hud-combat-actions">
-          ${game.user.isGM ? `<button type="button" class="narrative-hud-new-turn">Nouveau Tour</button>` : ""}
-          ${game.user.isGM ? `<button type="button" class="narrative-hud-clear">Vider Timeline</button>` : ""}
-          <button type="button" class="narrative-hud-refresh">&#8635;</button>
-        </div>
         <div class="narrative-hud-combat-track">
           <div class="narrative-hud-timeline">
             ${timeline.map((item, index) => this._renderChip(item, "timeline", index)).join("")}
           </div>
         </div>
-        <span class="narrative-hud-version">V0.27</span>
+        <div class="narrative-hud-combat-actions">
+          ${game.user.isGM ? `<button type="button" class="narrative-hud-new-turn">Nouveau Tour</button>` : ""}
+          ${game.user.isGM ? `<button type="button" class="narrative-hud-clear">Vider Timeline</button>` : ""}
+          <button type="button" class="narrative-hud-refresh">&#8635;</button>
+        </div>
+        <span class="narrative-hud-version">V0.28</span>
       </section>
 
       <aside class="narrative-hud-combat-pool-panel">
         <div class="narrative-hud-pool-header">
-          <span>POOL</span>
           ${game.user.isGM ? `<button type="button" class="narrative-hud-add">+ Ajouter</button>` : ""}
         </div>
         <div class="narrative-hud-pool">
-          ${pool.map(item => this._renderChip(item, "pool")).join("")}
+          ${pool.map(item => this._renderChip(item, "pool", null, activeId)).join("")}
         </div>
         <div class="narrative-hud-combat-mode-control">
           ${this._renderModeToggle()}
@@ -370,6 +372,28 @@ class NarrativeHudOverlay {
     }
   }
 
+  _positionCombatPoolPanel() {
+    const panel = document.querySelector(".narrative-hud-combat-pool-panel");
+    if (!panel) return;
+
+    const sidebar = document.getElementById("sidebar");
+    const sidebarRect = sidebar?.getBoundingClientRect();
+    const sidebarStyle = sidebar ? window.getComputedStyle(sidebar) : null;
+    const sidebarVisible = Boolean(
+      sidebar
+      && sidebarRect
+      && sidebarRect.width > 20
+      && sidebarRect.height > 20
+      && sidebarStyle?.display !== "none"
+      && sidebarStyle?.visibility !== "hidden"
+      && !sidebar.classList.contains("collapsed")
+      && sidebarRect.left < window.innerWidth
+    );
+
+    const right = sidebarVisible ? Math.max(12, window.innerWidth - sidebarRect.left + 12) : 12;
+    panel.style.right = `${right}px`;
+  }
+
   async _openCreateDialog() {
     const content = `
       <form class="narrative-hud-create-form">
@@ -387,9 +411,9 @@ class NarrativeHudOverlay {
           <label>Type</label>
           <select name="type">
             <option value="player">PJ</option>
-            <option value="npc">PNJ</option>
-            <option value="monster">Monstre</option>
-            <option value="slot">Slot Joueur</option>
+            <option value="npc">Allié</option>
+            <option value="monster">Ennemi</option>
+            <option value="slot">Slot</option>
           </select>
         </div>
 
@@ -445,19 +469,22 @@ class NarrativeHudOverlay {
     }).render(true);
   }
 
-  _renderChip(item, zone, index = null) {
+  _renderChip(item, zone, index = null, activeId = null) {
     const indexAttr = index === null ? "" : `data-index="${index}"`;
     const playedClass = item.played ? "narrative-hud-chip-played" : "";
+    const activeClass = zone === "pool" && activeId && item.id === activeId ? "narrative-hud-chip-spotlight" : "";
+    const typeLabel = this._getTypeLabel(item.type);
 
     return `
       <button
-        class="narrative-hud-chip narrative-hud-chip-${item.type} narrative-hud-chip-${zone} ${playedClass}"
-        title="${item.name}"
+        class="narrative-hud-chip narrative-hud-chip-${item.type} narrative-hud-chip-${zone} ${playedClass} ${activeClass}"
+        title="${typeLabel} - ${item.name}"
         type="button"
         data-id="${item.id}"
         ${indexAttr}
       >
-        ${item.label}
+        <span class="narrative-hud-chip-label">${item.label}</span>
+        <span class="narrative-hud-chip-type">${typeLabel}</span>
       </button>
     `;
   }
@@ -474,9 +501,18 @@ class NarrativeHudOverlay {
   }
 
   _renderModeToggle() {
-    const modeLabel = isCombatMode() ? "&#9876; Combat" : "&#128367; Intrigue";
+    const modeLabel = isCombatMode() ? "&#128367; Intrigue" : "&#9876; Combat";
 
     return `<button type="button" class="narrative-hud-mode-toggle">${modeLabel}</button>`;
+  }
+
+  _getTypeLabel(type) {
+    return {
+      player: "PJ",
+      npc: "Allié",
+      monster: "Ennemi",
+      slot: "Slot"
+    }[type] ?? type;
   }
 }
 
@@ -515,7 +551,7 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", () => {
-  console.log("Narrative HUD | Ready V0.27");
+  console.log("Narrative HUD | Ready V0.28");
 
   document.getElementById("narrative-hud-launcher")?.remove();
 
@@ -545,7 +581,10 @@ Hooks.once("ready", () => {
     button.style.bottom = `${Math.max(8, Math.min(bottom, maxBottom))}px`;
   };
 
-  window.addEventListener("resize", () => applyLauncherPosition(game.settings.get(MODULE_ID, "launcherPosition")));
+  window.addEventListener("resize", () => {
+    applyLauncherPosition(game.settings.get(MODULE_ID, "launcherPosition"));
+    narrativeHudOverlay?._positionCombatPoolPanel();
+  });
 
   let hasMoved = false;
   let offsetX = 0;
