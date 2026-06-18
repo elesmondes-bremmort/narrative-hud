@@ -130,8 +130,9 @@ class NarrativeHudOverlay {
         <span class="narrative-hud-version">V0.31</span>
       </section>
 
+      ${this._renderActivePortrait(activeItem)}
+
       <aside class="narrative-hud-combat-pool-panel">
-        ${this._renderActivePortrait(activeItem)}
         <div class="narrative-hud-pool-header">
           ${game.user.isGM ? `<button type="button" class="narrative-hud-add">+ Ajouter</button>` : ""}
           ${game.user.isGM ? `<button type="button" class="narrative-hud-add-slot">+ Slot Joueur</button>` : ""}
@@ -523,6 +524,7 @@ class NarrativeHudOverlay {
 
   _positionCombatPoolPanel() {
     const panel = document.querySelector(".narrative-hud-combat-pool-panel");
+    const activePortrait = document.querySelector(".narrative-hud-active-portrait");
     if (!panel) return;
 
     const sidebar = document.getElementById("sidebar");
@@ -541,6 +543,26 @@ class NarrativeHudOverlay {
 
     const right = sidebarVisible ? Math.max(12, window.innerWidth - sidebarRect.left + 12) : 12;
     panel.style.right = `${right}px`;
+
+    if (!activePortrait) return;
+
+    const timeline = document.querySelector(".narrative-hud-combat-timeline-panel");
+    const panelRect = panel.getBoundingClientRect();
+    const timelineRect = timeline?.getBoundingClientRect();
+    const gapLeft = (timelineRect?.right ?? 0) + 12;
+    const gapRight = panelRect.left - 12;
+    const availableWidth = gapRight - gapLeft;
+
+    if (availableWidth < 96) {
+      activePortrait.style.display = "none";
+      return;
+    }
+
+    const width = Math.min(132, availableWidth);
+    activePortrait.style.display = "flex";
+    activePortrait.style.width = `${width}px`;
+    activePortrait.style.left = `${gapRight - width}px`;
+    activePortrait.style.top = `${timelineRect?.top ?? 10}px`;
   }
 
   async _openCreateDialog() {
@@ -664,12 +686,14 @@ class NarrativeHudOverlay {
       >
         <div class="narrative-hud-card-portrait-wrap">
           <div class="narrative-hud-card-portrait"></div>
+          <div class="narrative-hud-card-name">${item.name}</div>
         </div>
         <div class="narrative-hud-card-stats">
-          <div class="narrative-hud-card-name">${item.name}</div>
           ${this._renderHudCardDetails(item)}
         </div>
         <div class="narrative-hud-card-statuses">
+          <span></span>
+          <span></span>
           <span></span>
         </div>
       </article>
@@ -709,11 +733,11 @@ class NarrativeHudOverlay {
     if (item.type === "player") {
       return `
         <div class="narrative-hud-card-lines">
-          <div>&#10084;&#65039; Vitalit&eacute; 25/30</div>
-          <div>&#128154; Endurance 12/20</div>
-          <div>&#128153; Maestra 8/12</div>
-          <div>&#9889; Fulgurance 3</div>
-          <div>&#128737; Protection 2</div>
+          <div><span>&#10084;&#65039;</span><strong>10/10</strong></div>
+          <div><span>&#128293;</span><strong>10/10</strong></div>
+          <div><span>&#128167;</span><strong>10/10</strong></div>
+          <div><span>&#128737;</span><strong>10/10</strong></div>
+          <div><span>&#9889;</span><strong>10/10</strong></div>
         </div>
       `;
     }
@@ -730,8 +754,8 @@ class NarrativeHudOverlay {
 
     return `
       <div class="narrative-hud-card-lines">
-        <div>&#129656; Blessures : ${wounds}</div>
-        <div>&#128737; Protection 1</div>
+        <div><span>&#129656;</span><strong>${wounds}</strong></div>
+        <div><span>&#128737;</span><strong>1</strong></div>
       </div>
     `;
   }
