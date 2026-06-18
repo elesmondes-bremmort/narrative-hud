@@ -14,12 +14,29 @@ function getTimeline() {
   return game.settings.get(MODULE_ID, "timeline") ?? [];
 }
 
+function getViewMode() {
+  return game.settings.get(MODULE_ID, "viewMode") ?? "intrigue";
+}
+
 async function setPool(pool) {
   await game.settings.set(MODULE_ID, "pool", pool);
 }
 
 async function setTimeline(timeline) {
   await game.settings.set(MODULE_ID, "timeline", timeline);
+}
+
+async function setViewMode(mode) {
+  const nextMode = mode === "combat" ? "combat" : "intrigue";
+  await game.settings.set(MODULE_ID, "viewMode", nextMode);
+}
+
+function isIntrigueMode() {
+  return getViewMode() === "intrigue";
+}
+
+function isCombatMode() {
+  return getViewMode() === "combat";
 }
 
 class NarrativeHudApp extends Application {
@@ -38,43 +55,70 @@ class NarrativeHudApp extends Application {
   }
 
   async _renderInner() {
-    const pool = getPool();
-    const timeline = getTimeline();
+    const mode = getViewMode();
+    const modeLabel = mode === "combat" ? "⚔ Combat" : "🕯 Intrigue";
 
     return $(`
       <section class="narrative-hud-shell">
         <header class="narrative-hud-header">
           <div class="narrative-hud-header-spacer"></div>
           <div class="narrative-hud-header-actions">
+            <button type="button" class="narrative-hud-mode-toggle">${modeLabel}</button>
             <button type="button" class="narrative-hud-refresh">↻ Actualiser</button>
             ${game.user.isGM ? `<button type="button" class="narrative-hud-add">+ Ajouter</button>` : ""}
             ${game.user.isGM ? `<button type="button" class="narrative-hud-new-turn">Nouveau Tour</button>` : ""}
             ${game.user.isGM ? `<button type="button" class="narrative-hud-clear">Vider Timeline</button>` : ""}
-            <span>V0.25</span>
+            <span>V0.26</span>
           </div>
         </header>
 
-        <main class="narrative-hud-body">
-          <section class="narrative-hud-section">
-            <h3>POOL</h3>
-            <div class="narrative-hud-pool">
-              ${pool.map(item => this._renderChip(item, "pool")).join("")}
-            </div>
-          </section>
-
-          <section class="narrative-hud-section">
-            <h3>TIMELINE</h3>
-            <div class="narrative-hud-timeline">
-              ${timeline.map((item, index) => this._renderChip(item, "timeline", index)).join("")}
-            </div>
-          </section>
-        </main>
+        ${isIntrigueMode() ? this._renderIntrigueView() : this._renderCombatView()}
       </section>
     `);
   }
 
+  _renderIntrigueView() {
+    const players = getPool().filter(item => item.type === "player");
+
+    return `
+      <main class="narrative-hud-body">
+        <div class="narrative-hud-intrigue-bar">
+          ${players.map(item => this._renderHudCard(item)).join("")}
+        </div>
+      </main>
+    `;
+  }
+
+  _renderCombatView() {
+    const pool = getPool();
+    const timeline = getTimeline();
+
+    return `
+      <main class="narrative-hud-body">
+        <section class="narrative-hud-section">
+          <h3>POOL</h3>
+          <div class="narrative-hud-pool">
+            ${pool.map(item => this._renderChip(item, "pool")).join("")}
+          </div>
+        </section>
+
+        <section class="narrative-hud-section">
+          <h3>TIMELINE</h3>
+          <div class="narrative-hud-timeline">
+            ${timeline.map((item, index) => this._renderChip(item, "timeline", index)).join("")}
+          </div>
+        </section>
+      </main>
+    `;
+  }
+
   activateListeners(html) {
     super.activateListeners(html);
+
+    html.find(".narrative-hud-mode-toggle").on("click", async () => {
+      await setViewMode(isCombatMode() ? "intrigue" : "combat");
+      this.render(false);
+    });
 
     html.find(".narrative-hud-refresh").on("click", () => this.render(false));
 
@@ -415,6 +459,17 @@ class NarrativeHudApp extends Application {
     `;
   }
 
+  _renderHudCard(item) {
+    const label = String(item.label ?? item.name?.[0] ?? "?").trim().slice(0, 3).toUpperCase();
+
+    return `
+      <article class="narrative-hud-card" title="${item.name}">
+        <div class="narrative-hud-card-portrait">${label}</div>
+        <div class="narrative-hud-card-name">${item.name}</div>
+      </article>
+    `;
+  }
+
   async close(options = {}) {
     const el = this.element?.[0];
 
@@ -452,6 +507,17 @@ Hooks.once("init", () => {
     }
   });
 
+  game.settings.register(MODULE_ID, "viewMode", {
+    scope: "client",
+    config: false,
+    type: String,
+    default: "intrigue",
+    choices: {
+      intrigue: "Intrigue",
+      combat: "Combat"
+    }
+  });
+
   game.settings.register(MODULE_ID, "pool", {
     scope: "world",
     config: false,
@@ -468,7 +534,7 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", () => {
-  console.log("Narrative HUD | Ready V0.25");
+  console.log("Narrative HUD | Ready V0.26");
 
   document.getElementById("narrative-hud-launcher")?.remove();
 
