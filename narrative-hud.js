@@ -127,7 +127,7 @@ class NarrativeHudOverlay {
           ${game.user.isGM ? `<button type="button" class="narrative-hud-clear">Vider Timeline</button>` : ""}
           <button type="button" class="narrative-hud-refresh">&#8635;</button>
         </div>
-        <span class="narrative-hud-version">V0.33</span>
+        <span class="narrative-hud-version">V0.34</span>
       </section>
 
       ${this._renderActivePortrait(activeItem)}
@@ -537,6 +537,7 @@ class NarrativeHudOverlay {
   _positionCombatPoolPanel() {
     const panel = document.querySelector(".narrative-hud-combat-pool-panel");
     const activePortrait = document.querySelector(".narrative-hud-active-portrait");
+    const timeline = document.querySelector(".narrative-hud-combat-timeline-panel");
     if (!panel) return;
 
     const sidebar = document.getElementById("sidebar");
@@ -556,25 +557,41 @@ class NarrativeHudOverlay {
     const right = sidebarVisible ? Math.max(12, window.innerWidth - sidebarRect.left + 12) : 12;
     panel.style.right = `${right}px`;
 
-    if (!activePortrait) return;
+    if (!timeline || !activePortrait) return;
 
-    const timeline = document.querySelector(".narrative-hud-combat-timeline-panel");
     const panelRect = panel.getBoundingClientRect();
-    const timelineRect = timeline?.getBoundingClientRect();
-    const gapLeft = (timelineRect?.right ?? 0) + 12;
+    const layoutLeft = 12;
+    const layoutRight = Math.max(layoutLeft, panelRect.left - 12);
+    const timelineWidth = Math.min(840, layoutRight - layoutLeft);
+
+    timeline.style.width = `${timelineWidth}px`;
+    timeline.style.maxWidth = `${timelineWidth}px`;
+    timeline.style.left = `${layoutLeft + (layoutRight - layoutLeft) / 2}px`;
+
+    const timelineRect = timeline.getBoundingClientRect();
+    const gapLeft = timelineRect.right + 12;
     const gapRight = panelRect.left - 12;
     const availableWidth = gapRight - gapLeft;
+    activePortrait.classList.remove("narrative-hud-active-portrait-compact");
+    activePortrait.style.display = "flex";
+    activePortrait.style.width = "";
+    const portraitWidth = activePortrait.getBoundingClientRect().width;
 
-    if (availableWidth < 160) {
-      activePortrait.style.display = "none";
+    if (availableWidth >= portraitWidth) {
+      activePortrait.style.left = `${gapRight - portraitWidth}px`;
+      activePortrait.style.top = `${timelineRect.top}px`;
       return;
     }
 
-    const width = Math.min(240, availableWidth);
-    activePortrait.style.display = "flex";
-    activePortrait.style.width = `${width}px`;
-    activePortrait.style.left = `${gapRight - width}px`;
-    activePortrait.style.top = `${timelineRect?.top ?? 10}px`;
+    activePortrait.classList.add("narrative-hud-active-portrait-compact");
+    const compactWidth = activePortrait.getBoundingClientRect().width;
+    const compactLeft = Math.max(layoutLeft, Math.min(
+      timelineRect.right - compactWidth,
+      gapRight - compactWidth
+    ));
+
+    activePortrait.style.left = `${compactLeft}px`;
+    activePortrait.style.top = `${timelineRect.bottom + 12}px`;
   }
 
   async _openCreateDialog() {
@@ -842,7 +859,7 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", () => {
-  console.log("Narrative HUD | Ready V0.33");
+  console.log("Narrative HUD | Ready V0.34");
 
   window.addEventListener("resize", () => {
     narrativeHudOverlay?._positionCombatPoolPanel();
