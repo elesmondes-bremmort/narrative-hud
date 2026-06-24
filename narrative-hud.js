@@ -127,7 +127,7 @@ class NarrativeHudOverlay {
           ${game.user.isGM ? `<button type="button" class="narrative-hud-clear">Vider Timeline</button>` : ""}
           <button type="button" class="narrative-hud-refresh">&#8635;</button>
         </div>
-        <span class="narrative-hud-version">V0.34</span>
+        <span class="narrative-hud-version">V0.35</span>
       </section>
 
       ${this._renderActivePortrait(activeItem)}
@@ -538,7 +538,10 @@ class NarrativeHudOverlay {
     const panel = document.querySelector(".narrative-hud-combat-pool-panel");
     const activePortrait = document.querySelector(".narrative-hud-active-portrait");
     const timeline = document.querySelector(".narrative-hud-combat-timeline-panel");
-    if (!panel) return;
+    const intriguePanel = document.querySelector(".narrative-hud-intrigue-panel");
+    const intrigueBar = document.querySelector(".narrative-hud-intrigue-bar");
+    const safeGap = Math.max(8, Math.min(12, window.innerWidth * 0.008));
+    const foundrySafeLeft = this._getFoundryLeftSafeEdge(safeGap);
 
     const sidebar = document.getElementById("sidebar");
     const sidebarRect = sidebar?.getBoundingClientRect();
@@ -550,48 +553,121 @@ class NarrativeHudOverlay {
       && sidebarRect.height > 20
       && sidebarStyle?.display !== "none"
       && sidebarStyle?.visibility !== "hidden"
-      && !sidebar.classList.contains("collapsed")
       && sidebarRect.left < window.innerWidth
     );
+    const safeRight = Math.max(
+      safeGap,
+      sidebarVisible ? sidebarRect.left - safeGap : window.innerWidth - safeGap
+    );
+    const safeLeft = Math.min(foundrySafeLeft, safeRight);
+    const safeWidth = Math.max(0, safeRight - safeLeft);
 
-    const right = sidebarVisible ? Math.max(12, window.innerWidth - sidebarRect.left + 12) : 12;
+    if (intriguePanel) {
+      intriguePanel.style.left = `${safeLeft + safeWidth / 2}px`;
+      intriguePanel.style.maxWidth = `${safeWidth}px`;
+      if (intrigueBar) intrigueBar.style.maxWidth = `${Math.min(760, safeWidth)}px`;
+    }
+
+    if (!panel) return;
+
+    const right = window.innerWidth - safeRight;
     panel.style.right = `${right}px`;
+    panel.style.maxWidth = `${safeWidth}px`;
 
     if (!timeline || !activePortrait) return;
 
     const panelRect = panel.getBoundingClientRect();
-    const layoutLeft = 12;
-    const layoutRight = Math.max(layoutLeft, panelRect.left - 12);
-    const timelineWidth = Math.min(840, layoutRight - layoutLeft);
-
-    timeline.style.width = `${timelineWidth}px`;
-    timeline.style.maxWidth = `${timelineWidth}px`;
-    timeline.style.left = `${layoutLeft + (layoutRight - layoutLeft) / 2}px`;
-
-    const timelineRect = timeline.getBoundingClientRect();
-    const gapLeft = timelineRect.right + 12;
-    const gapRight = panelRect.left - 12;
-    const availableWidth = gapRight - gapLeft;
+    const layoutLeft = safeLeft;
+    const layoutRight = Math.max(layoutLeft, panelRect.left - safeGap);
+    const layoutWidth = layoutRight - layoutLeft;
     activePortrait.classList.remove("narrative-hud-active-portrait-compact");
     activePortrait.style.display = "flex";
     activePortrait.style.width = "";
     const portraitWidth = activePortrait.getBoundingClientRect().width;
+    const minimumTimelineWidth = Math.min(420, layoutWidth);
 
-    if (availableWidth >= portraitWidth) {
-      activePortrait.style.left = `${gapRight - portraitWidth}px`;
+    if (layoutWidth >= minimumTimelineWidth + safeGap + portraitWidth) {
+      const timelineWidth = Math.min(840, layoutWidth - safeGap - portraitWidth);
+      const groupWidth = timelineWidth + safeGap + portraitWidth;
+      const groupLeft = layoutLeft + (layoutWidth - groupWidth) / 2;
+
+      timeline.style.width = `${timelineWidth}px`;
+      timeline.style.maxWidth = `${timelineWidth}px`;
+      timeline.style.left = `${groupLeft + timelineWidth / 2}px`;
+
+      const timelineRect = timeline.getBoundingClientRect();
+      activePortrait.style.left = `${timelineRect.right + safeGap}px`;
       activePortrait.style.top = `${timelineRect.top}px`;
       return;
     }
 
+    const timelineWidth = Math.min(840, layoutWidth);
+    timeline.style.width = `${timelineWidth}px`;
+    timeline.style.maxWidth = `${timelineWidth}px`;
+    timeline.style.left = `${layoutLeft + layoutWidth / 2}px`;
+
+    const timelineRect = timeline.getBoundingClientRect();
     activePortrait.classList.add("narrative-hud-active-portrait-compact");
     const compactWidth = activePortrait.getBoundingClientRect().width;
     const compactLeft = Math.max(layoutLeft, Math.min(
       timelineRect.right - compactWidth,
-      gapRight - compactWidth
+      layoutRight - compactWidth
     ));
 
     activePortrait.style.left = `${compactLeft}px`;
-    activePortrait.style.top = `${timelineRect.bottom + 12}px`;
+    activePortrait.style.top = `${timelineRect.bottom + safeGap}px`;
+  }
+
+  _getFoundryLeftSafeEdge(gap) {
+    const selectors = [
+      "#scene-navigation",
+      "#navigation",
+      "#scene-controls",
+      "#controls",
+      "#camera-views",
+      "#camera-dock",
+      "#players"
+    ];
+    let occupiedRight = 0;
+
+    for (const selector of selectors) {
+      const element = document.querySelector(selector);
+      if (!element || !this._isVisibleFoundryElement(element)) continue;
+
+      const rect = element.getBoundingClientRect();
+      if (rect.left >= window.innerWidth / 2) continue;
+
+      if (rect.width <= window.innerWidth * 0.55) {
+        occupiedRight = Math.max(occupiedRight, rect.right);
+        continue;
+      }
+
+      const children = element.querySelectorAll(
+        "button, a, li, [data-scene-id], .scene, .control-tool, .camera-view, video"
+      );
+      for (const child of children) {
+        if (!this._isVisibleFoundryElement(child)) continue;
+        const childRect = child.getBoundingClientRect();
+        if (childRect.left < window.innerWidth / 2) {
+          occupiedRight = Math.max(occupiedRight, childRect.right);
+        }
+      }
+    }
+
+    return Math.min(window.innerWidth, Math.max(gap, occupiedRight + gap));
+  }
+
+  _isVisibleFoundryElement(element) {
+    const rect = element.getBoundingClientRect();
+    const style = window.getComputedStyle(element);
+
+    return rect.width > 4
+      && rect.height > 4
+      && rect.right > 0
+      && rect.bottom > 0
+      && style.display !== "none"
+      && style.visibility !== "hidden"
+      && !element.classList.contains("collapsed");
   }
 
   async _openCreateDialog() {
@@ -859,7 +935,7 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", () => {
-  console.log("Narrative HUD | Ready V0.34");
+  console.log("Narrative HUD | Ready V0.35");
 
   window.addEventListener("resize", () => {
     narrativeHudOverlay?._positionCombatPoolPanel();
