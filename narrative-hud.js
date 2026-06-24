@@ -50,6 +50,7 @@ class NarrativeHudOverlay {
     this.lastActiveKey = null;
     this.scrollTimelineLeftAfterRender = false;
     this.scrollActiveTimelineAfterRender = false;
+    this.timelineScrollFrame = null;
   }
 
   get rendered() {
@@ -57,6 +58,13 @@ class NarrativeHudOverlay {
   }
 
   render() {
+    const previousTimeline = document.querySelector(".narrative-hud-timeline");
+    const previousTimelineScrollLeft = previousTimeline?.scrollLeft ?? null;
+    if (this.timelineScrollFrame !== null) {
+      window.cancelAnimationFrame(this.timelineScrollFrame);
+      this.timelineScrollFrame = null;
+    }
+
     document.getElementById("narrative-hud-overlay")?.remove();
 
     const html = this._renderInner();
@@ -64,10 +72,17 @@ class NarrativeHudOverlay {
     this.activateListeners(html);
     this._positionCombatPoolPanel();
     const scrolledToTimelineStart = this._scrollTimelineLeftIfNeeded();
+    if (!scrolledToTimelineStart) {
+      this._restoreTimelineScrollPosition(previousTimelineScrollLeft);
+    }
     this._scrollActiveCardIfChanged(!scrolledToTimelineStart);
   }
 
   close() {
+    if (this.timelineScrollFrame !== null) {
+      window.cancelAnimationFrame(this.timelineScrollFrame);
+      this.timelineScrollFrame = null;
+    }
     document.getElementById("narrative-hud-overlay")?.remove();
     narrativeHudOverlay = null;
   }
@@ -134,7 +149,7 @@ class NarrativeHudOverlay {
           ${game.user.isGM ? `<button type="button" class="narrative-hud-clear">Vider Timeline</button>` : ""}
           <button type="button" class="narrative-hud-refresh">&#8635;</button>
         </div>
-        <span class="narrative-hud-version">V0.36</span>
+        <span class="narrative-hud-version">V0.37</span>
       </section>
 
       ${this._renderActivePortrait(activeItem)}
@@ -530,6 +545,16 @@ class NarrativeHudOverlay {
     return true;
   }
 
+  _restoreTimelineScrollPosition(scrollLeft) {
+    if (scrollLeft === null) return;
+
+    const timeline = document.querySelector(".narrative-hud-timeline");
+    if (!timeline) return;
+
+    const maximumLeft = Math.max(0, timeline.scrollWidth - timeline.clientWidth);
+    timeline.scrollLeft = Math.max(0, Math.min(maximumLeft, scrollLeft));
+  }
+
   _scrollActiveCardIfChanged(allowTimelineScroll = true) {
     if (!isCombatMode()) return;
 
@@ -540,7 +565,7 @@ class NarrativeHudOverlay {
       && Boolean(activeKey)
       && (activeChanged || this.scrollActiveTimelineAfterRender);
 
-    if (shouldScrollTimeline) this._scrollTimelineToActiveChip();
+    if (shouldScrollTimeline) this._scheduleTimelineScrollToActiveChip();
     this.scrollActiveTimelineAfterRender = false;
 
     if (activeChanged) {
@@ -553,6 +578,17 @@ class NarrativeHudOverlay {
     this.lastActiveKey = activeKey;
   }
 
+  _scheduleTimelineScrollToActiveChip() {
+    if (this.timelineScrollFrame !== null) {
+      window.cancelAnimationFrame(this.timelineScrollFrame);
+    }
+
+    this.timelineScrollFrame = window.requestAnimationFrame(() => {
+      this.timelineScrollFrame = null;
+      this._scrollTimelineToActiveChip();
+    });
+  }
+
   _scrollTimelineToActiveChip() {
     const timeline = document.querySelector(".narrative-hud-timeline");
     const activeChip = timeline?.querySelector(".narrative-hud-chip-active-turn");
@@ -560,13 +596,33 @@ class NarrativeHudOverlay {
 
     const timelineRect = timeline.getBoundingClientRect();
     const activeChipRect = activeChip.getBoundingClientRect();
-    const centeredLeft = timeline.scrollLeft
-      + activeChipRect.left
-      - timelineRect.left
-      + activeChipRect.width / 2
-      - timeline.clientWidth / 2;
+    const fullyVisible = activeChipRect.left >= timelineRect.left
+      && activeChipRect.right <= timelineRect.right;
+    if (fullyVisible) return;
+
+    const fullyOutside = activeChipRect.right <= timelineRect.left
+      || activeChipRect.left >= timelineRect.right;
+    const scrollMargin = 6;
+    let targetLeft;
+
+    if (fullyOutside) {
+      targetLeft = timeline.scrollLeft
+        + activeChipRect.left
+        - timelineRect.left
+        + activeChipRect.width / 2
+        - timeline.clientWidth / 2;
+    } else if (activeChipRect.left < timelineRect.left) {
+      targetLeft = timeline.scrollLeft
+        - (timelineRect.left - activeChipRect.left)
+        - scrollMargin;
+    } else {
+      targetLeft = timeline.scrollLeft
+        + (activeChipRect.right - timelineRect.right)
+        + scrollMargin;
+    }
+
     const maximumLeft = Math.max(0, timeline.scrollWidth - timeline.clientWidth);
-    const targetLeft = Math.max(0, Math.min(maximumLeft, centeredLeft));
+    targetLeft = Math.max(0, Math.min(maximumLeft, targetLeft));
 
     timeline.scrollTo({ left: targetLeft, behavior: "smooth" });
   }
@@ -973,7 +1029,7 @@ Hooks.once("init", () => {
 });
 
 Hooks.once("ready", () => {
-  console.log("Narrative HUD | Ready V0.36");
+  console.log("Narrative HUD | Ready V0.37");
 
   window.addEventListener("resize", () => {
     narrativeHudOverlay?._positionCombatPoolPanel();
